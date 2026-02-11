@@ -1,0 +1,39 @@
+<Project>
+  <Target Name="CopyToDebugPlugins"
+          AfterTargets="Build"
+          Condition="
+          '$(Configuration)' == 'Debug'
+          and $([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Scrubbler.Plugin'))
+          and '$(TargetFramework)' != ''
+        ">
+
+    <PropertyGroup>
+      <!-- Assume all repos are in the same directory -->
+      <DebugPluginsRoot>$(MSBuildProjectDirectory)\..\..\Scrubbler-2\Scrubbler\DebugPlugins</DebugPluginsRoot>
+      <DebugPluginsDir>$(DebugPluginsRoot)\$(MSBuildProjectName)</DebugPluginsDir>
+    </PropertyGroup>
+
+    <Message Text="Copying plugin outputs to $(DebugPluginsDir)"
+             Importance="High" />
+
+    <MakeDir Directories="$(DebugPluginsDir)" ContinueOnError="WarnAndContinue"/>
+
+    <ItemGroup>
+      <AllOutputs Include="$(TargetDir)*.dll" />
+      <AllOutputs Include="$(TargetDir)*.pdb" />
+      <AllOutputs Include="$(TargetDir)*.xml" />
+      <AllOutputs Include="$(TargetDir)*.env" />
+      <AllOutputs Include="$(TargetDir)*.png" />
+      <AllOutputs Include="$(TargetDir)*.deps.json" />
+      <AllOutputs Include="$(TargetDir)*.runtimeconfig.json" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(AllOutputs)"
+          DestinationFolder="$(DebugPluginsDir)"
+          SkipUnchangedFiles="true"
+          ContinueOnError="WarnAndContinue"/>
+
+    <Warning Condition="!Exists('$(DebugPluginsDir)')"
+             Text="Debug plugin copy skipped/failed: destination does not exist: $(DebugPluginsDir)" />
+  </Target>
+</Project>
