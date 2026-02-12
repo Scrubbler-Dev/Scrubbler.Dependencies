@@ -3,7 +3,7 @@ version: 2
 updates:
   # NuGet / Central Package Management
   - package-ecosystem: "nuget"
-    directory: "/Catalog"
+    directory: "/"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 25
