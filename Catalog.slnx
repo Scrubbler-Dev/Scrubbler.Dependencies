@@ -1,7 +1,0 @@
-<Solution>
-  <Folder Name="/Solution Items/">
-    <File Path="global.json" />
-    <File Path="Scrubbler.Packages.props" />
-  </Folder>
-  <Project Path="Catalog/Catalog.csproj" Id="862542f4-e87a-424e-899b-341eaad899a8" />
-</Solution>
