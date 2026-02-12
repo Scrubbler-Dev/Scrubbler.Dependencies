@@ -3,6 +3,15 @@ version: 2
 updates:
   # NuGet / Central Package Management
   - package-ecosystem: "nuget"
+    directory: "/Catalog"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 25
+    labels:
+      - "dependencies"
+      - "nuget"
+
+  - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "daily"
