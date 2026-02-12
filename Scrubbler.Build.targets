@@ -1,0 +1,21 @@
+<Project>
+  <Target Name="EnsureGlobalJson"
+          BeforeTargets="PrepareForBuild">
+
+    <PropertyGroup>
+      <!-- source -->
+      <DepsGlobalJson>..\deps\global.json</DepsGlobalJson>
+
+      <!-- destination: one folder above project directory -->
+      <RootGlobalJson>$(MSBuildProjectDirectory)\..\global.json</RootGlobalJson>
+    </PropertyGroup>
+
+    <Message Text="Ensuring global.json exists at $(RootGlobalJson)"
+             Importance="High" />
+
+    <!-- only copy if missing or different -->
+    <Copy SourceFiles="$(DepsGlobalJson)"
+          DestinationFiles="$(RootGlobalJson)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>
