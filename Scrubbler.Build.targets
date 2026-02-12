@@ -1,6 +1,7 @@
 <Project>
   <Target Name="EnsureGlobalJson"
-          BeforeTargets="PrepareForBuild">
+          BeforeTargets="PrepareForBuild"
+          Condition="!$(MSBuildProjectName.EndsWith('.Test'))">
 
     <PropertyGroup>
       <!-- source -->
