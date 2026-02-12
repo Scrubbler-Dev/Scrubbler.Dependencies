@@ -8,19 +8,17 @@
   <ItemGroup>
     <!-- Uno / Ui -->
     <PackageVersion Include="CommunityToolkit.WinUI.Extensions" Version="8.2.251219" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.3" />
     <PackageVersion Include="Uno.Microsoft.Xaml.Behaviors.Interactivity.WinUI" Version="3.0.3" />
     <PackageVersion Include="Uno.Microsoft.Xaml.Behaviors.WinUI.Managed" Version="2.4.2" />
-    <PackageVersion Include="SkiaSharp" Version="3.119.1" />
-    <PackageVersion Include="WinUI.TableView" Version="1.4.0-preview2" />
-
+    <PackageVersion Include="SkiaSharp" Version="3.119.2" />
+    <PackageVersion Include="WinUI.TableView" Version="1.4.0" />
     <!-- Plugins -->
     <PackageVersion Include="Scrubbler.PluginBase" Version="0.1.0-dev2" />
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
     <PackageVersion Include="FlaUI.UIA3" Version="5.0.0" />
     <PackageVersion Include="Scrubbler.MediaPlayerScrobblerBase" Version="0.1.0-dev" />
     <PackageVersion Include="Shoegaze.LastFM" Version="1.1.0" />
-
     <!-- Testing -->
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
