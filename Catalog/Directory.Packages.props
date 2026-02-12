@@ -1,4 +1,0 @@
-<!-- This file is only used by dependabot -->
-<Project>
-  <Import Project="../Scrubbler.Packages.props" />
-</Project>

@@ -20,7 +20,7 @@
     <PackageVersion Include="FlaUI.UIA3" Version="5.0.0" />
     <PackageVersion Include="Scrubbler.MediaPlayerScrobblerBase" Version="0.1.0-dev" />
     <PackageVersion Include="Shoegaze.LastFM" Version="1.1.0" />
-    
+
     <!-- Testing -->
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
