@@ -37,6 +37,8 @@ jobs:
           COPY_GLOBAL_JSON: "true"
           TAG: ${{ steps.meta.outputs.tag }}
           DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
+          # used to identify the correct submodule in .gitmodules
+          DEPS_REPO_MATCH: "Scrubbler.Dependencies"
         run: |
           set -euo pipefail
 
@@ -77,8 +79,7 @@ jobs:
 
             processed=$((processed+1))
 
-            WORKDIR=$(mktemp -d)
-
+            WORKDIR="$(mktemp -d)"
             if ! git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/$REPO.git" "$WORKDIR"; then
               echo "Clone failed"
               failed=$((failed+1))
@@ -87,17 +88,25 @@ jobs:
             fi
 
             cd "$WORKDIR"
-
             git checkout "$DEFAULT_BRANCH"
             git pull
 
             git submodule update --init --recursive
 
-            # detect submodule path dynamically (supports nested paths like Scrubbler/deps)
-            FOUND_SUBMODULE_PATH="$(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -E '(^|/)deps$' | head -n 1)"
+            # find the submodule whose URL matches Scrubbler.Dependencies (no guessing by path)
+            FOUND_SUBMODULE_PATH=""
+            while read -r key; do
+              url="$(git config -f .gitmodules --get "$key" || true)"
+              if echo "$url" | grep -q "$DEPS_REPO_MATCH"; then
+                name="${key#submodule.}"
+                name="${name%.url}"
+                FOUND_SUBMODULE_PATH="$(git config -f .gitmodules --get "submodule.${name}.path" || true)"
+                break
+              fi
+            done < <(git config -f .gitmodules --name-only --get-regexp '^submodule\..*\.url$' || true)
 
             if [ -z "$FOUND_SUBMODULE_PATH" ]; then
-              echo "No deps submodule found → skipping"
+              echo "No submodule pointing to '$DEPS_REPO_MATCH' found → skipping"
               skipped=$((skipped+1))
               cd /
               rm -rf "$WORKDIR"
@@ -105,31 +114,32 @@ jobs:
             fi
 
             if [ ! -d "$FOUND_SUBMODULE_PATH" ]; then
-              echo "Detected submodule path '$FOUND_SUBMODULE_PATH' does not exist → skipping"
+              echo "Submodule path '$FOUND_SUBMODULE_PATH' not present after init → failing this repo"
               failed=$((failed+1))
               cd /
               rm -rf "$WORKDIR"
               continue
             fi
 
-            echo "Using submodule path: $FOUND_SUBMODULE_PATH"
+            echo "Using deps submodule path: $FOUND_SUBMODULE_PATH"
 
-            # create branch FIRST (critical fix)
+            # create branch FIRST (from default branch)
             git checkout -B "$BRANCH" "$DEFAULT_BRANCH"
 
-            # update submodule
+            # update submodule to tagged commit
             cd "$FOUND_SUBMODULE_PATH"
             git fetch --all --tags
             git checkout "$DEPS_COMMIT"
             cd ..
 
-            # optional global.json copy
+            # optional: copy deps/global.json to repo root
             if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
               cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
-              git add "./global.json"
+              git add -- "./global.json"
             fi
 
-            git add "$FOUND_SUBMODULE_PATH"
+            # stage submodule pointer update (note the --)
+            git add -- "$FOUND_SUBMODULE_PATH"
 
             if git diff --cached --quiet; then
               echo "Already up to date."
