@@ -93,6 +93,7 @@ jobs:
 
             git submodule update --init --recursive
 
+            # detect submodule path dynamically (supports nested paths like Scrubbler/deps)
             FOUND_SUBMODULE_PATH="$(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -E '(^|/)deps$' | head -n 1)"
 
             if [ -z "$FOUND_SUBMODULE_PATH" ]; then
@@ -113,14 +114,16 @@ jobs:
 
             echo "Using submodule path: $FOUND_SUBMODULE_PATH"
 
+            # create branch FIRST (critical fix)
+            git checkout -B "$BRANCH" "$DEFAULT_BRANCH"
+
+            # update submodule
             cd "$FOUND_SUBMODULE_PATH"
             git fetch --all --tags
             git checkout "$DEPS_COMMIT"
             cd ..
 
-            # create branch BEFORE staging (important!)
-            git checkout -B "$BRANCH"
-
+            # optional global.json copy
             if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
               cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
               git add "./global.json"
