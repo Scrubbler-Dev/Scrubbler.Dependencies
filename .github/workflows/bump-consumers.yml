@@ -37,7 +37,6 @@ jobs:
           COPY_GLOBAL_JSON: "true"
           TAG: ${{ steps.meta.outputs.tag }}
           DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
-          # used to identify the correct submodule in .gitmodules
           DEPS_REPO_MATCH: "Scrubbler.Dependencies"
         run: |
           set -euo pipefail
@@ -93,7 +92,7 @@ jobs:
 
             git submodule update --init --recursive
 
-            # find the submodule whose URL matches Scrubbler.Dependencies (no guessing by path)
+            # Find the submodule whose URL points to Scrubbler.Dependencies
             FOUND_SUBMODULE_PATH=""
             while read -r key; do
               url="$(git config -f .gitmodules --get "$key" || true)"
@@ -123,22 +122,22 @@ jobs:
 
             echo "Using deps submodule path: $FOUND_SUBMODULE_PATH"
 
-            # create branch FIRST (from default branch)
+            # Create branch FIRST
             git checkout -B "$BRANCH" "$DEFAULT_BRANCH"
 
-            # update submodule to tagged commit
-            cd "$FOUND_SUBMODULE_PATH"
+            # Update submodule to deps commit (use pushd/popd so we return to repo root)
+            pushd "$FOUND_SUBMODULE_PATH" >/dev/null
             git fetch --all --tags
             git checkout "$DEPS_COMMIT"
-            cd ..
+            popd >/dev/null
 
-            # optional: copy deps/global.json to repo root
+            # Optional: copy deps/global.json to repo root (we are in repo root here)
             if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
               cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
               git add -- "./global.json"
             fi
 
-            # stage submodule pointer update (note the --)
+            # Stage submodule pointer update (we are in repo root here)
             git add -- "$FOUND_SUBMODULE_PATH"
 
             if git diff --cached --quiet; then
