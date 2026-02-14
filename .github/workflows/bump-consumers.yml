@@ -28,19 +28,16 @@ jobs:
           COMMIT="$(git rev-list -n 1 "$TAG")"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-          echo "Tag: $TAG"
-          echo "Commit: $COMMIT"
 
       - name: Bump submodule in consumer repos and open PRs
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.SCRUBBLER_PLUGINS_PAT }}
+          OWNER: Scrubbler-Dev
+          SUBMODULE_PATH: deps
+          COPY_GLOBAL_JSON: "true"
           TAG: ${{ steps.meta.outputs.tag }}
           DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
-          OWNER: "Scrubbler-Dev"
-          SUBMODULE_PATH: "deps"
-          # set true if you want to copy deps/global.json to repo root as part of the PR
-          COPY_GLOBAL_JSON: "true"
-        shell: bash
         run: |
           set -euo pipefail
 
@@ -49,139 +46,100 @@ jobs:
 
           BRANCH="chore/bump-deps-${TAG}"
           TITLE="chore: bump Scrubbler.Dependencies to ${TAG}"
-          BODY="$(cat <<EOF
-This PR bumps the Scrubbler.Dependencies submodule to tag ${TAG} (${DEPS_COMMIT}).
+          BODY="This PR bumps the Scrubbler.Dependencies submodule to tag ${TAG} (${DEPS_COMMIT})."
 
-Generated automatically from a Scrubbler.Dependencies tag push.
-EOF
-)"
+          echo "Discovering repositories..."
 
-          echo "Discovering repos in ${OWNER}..."
-          ALL_REPOS="$(gh repo list "${OWNER}" --limit 500 --json name,isArchived,isFork,defaultBranchRef -q '.[] | select(.isArchived==false and .isFork==false) | [.name, .defaultBranchRef.name] | @tsv')"
-
-          if [ -z "${ALL_REPOS}" ]; then
-            echo "No repos found (or token lacks access)."
-            exit 0
-          fi
+          gh repo list "$OWNER" --limit 500 \
+            --json name,isArchived,isFork,defaultBranchRef \
+            -q '.[] | select(.isArchived==false and .isFork==false) | [.name, .defaultBranchRef.name] | @tsv' \
+            > repos.txt
 
           processed=0
-          skipped=0
           updated=0
+          skipped=0
           failed=0
 
-          while IFS=$'\t' read -r REPO DEFAULT_BRANCH; do
-            [ -n "${REPO}" ] || continue
+          while IFS=$'\t' read -r REPO DEFAULT_BRANCH
+          do
+            [ -n "$REPO" ] || continue
             DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
-            echo "=============================="
-            echo "Repo: ${OWNER}/${REPO} (default: ${DEFAULT_BRANCH})"
-            echo "=============================="
+            echo "======================================"
+            echo "Processing: $OWNER/$REPO"
+            echo "Default branch: $DEFAULT_BRANCH"
+            echo "======================================"
 
-            # Does repo have .gitmodules?
-            if ! gh api "repos/${OWNER}/${REPO}/contents/.gitmodules" >/dev/null 2>&1; then
-              echo "Skip: no .gitmodules"
-              skipped=$((skipped + 1))
+            # Check for .gitmodules
+            if ! gh api "repos/$OWNER/$REPO/contents/.gitmodules" >/dev/null 2>&1; then
+              echo "No .gitmodules → skipping"
+              skipped=$((skipped+1))
               continue
             fi
 
-            # Decode .gitmodules and check for the expected submodule path
-            gitmodules_content="$(gh api "repos/${OWNER}/${REPO}/contents/.gitmodules" -q '.content' | base64 -d || true)"
-            if ! echo "${gitmodules_content}" | grep -qE "^[[:space:]]*path[[:space:]]*=[[:space:]]*${SUBMODULE_PATH}[[:space:]]*$"; then
-              echo "Skip: .gitmodules does not define submodule path '${SUBMODULE_PATH}'"
-              skipped=$((skipped + 1))
+            # Check if submodule path exists in .gitmodules
+            if ! gh api "repos/$OWNER/$REPO/contents/.gitmodules" \
+                  -q '.content' | base64 -d | grep -q "path = $SUBMODULE_PATH"; then
+              echo "No '$SUBMODULE_PATH' submodule → skipping"
+              skipped=$((skipped+1))
               continue
             fi
 
-            processed=$((processed + 1))
+            processed=$((processed+1))
 
-            workdir="$(mktemp -d)"
-            echo "Cloning to ${workdir}..."
-            if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${OWNER}/${REPO}.git" "${workdir}"; then
-              echo "FAILED: git clone ${OWNER}/${REPO}"
-              failed=$((failed + 1))
-              rm -rf "${workdir}"
+            WORKDIR=$(mktemp -d)
+            git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/$REPO.git" "$WORKDIR"
+            cd "$WORKDIR"
+
+            git checkout "$DEFAULT_BRANCH"
+            git pull
+
+            git submodule update --init --recursive
+
+            # Update submodule to deps commit
+            cd "$SUBMODULE_PATH"
+            git fetch --all --tags
+            git checkout "$DEPS_COMMIT"
+            cd ..
+
+            # Optional: copy deps/global.json to repo root
+            if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$SUBMODULE_PATH/global.json" ]; then
+              cp -f "$SUBMODULE_PATH/global.json" "./global.json"
+              git add "./global.json"
+            fi
+
+            git add "$SUBMODULE_PATH"
+
+            if git diff --cached --quiet; then
+              echo "Already up to date."
+              cd /
+              rm -rf "$WORKDIR"
               continue
             fi
 
-            (
-              cd "${workdir}"
+            git checkout -B "$BRANCH"
+            git commit -m "$TITLE"
+            git push -u origin "$BRANCH" --force-with-lease
 
-              # checkout default branch
-              git checkout "${DEFAULT_BRANCH}"
-              git pull
+            set +e
+            gh pr create \
+              --repo "$OWNER/$REPO" \
+              --head "$BRANCH" \
+              --base "$DEFAULT_BRANCH" \
+              --title "$TITLE" \
+              --body "$BODY"
+            set -e
 
-              # init/update submodules
-              git submodule update --init --recursive
+            updated=$((updated+1))
 
-              if [ ! -d "${SUBMODULE_PATH}" ]; then
-                echo "Skip: submodule path '${SUBMODULE_PATH}' missing in checkout (unexpected)"
-                exit 0
-              fi
+            cd /
+            rm -rf "$WORKDIR"
 
-              # update submodule to deps commit (commit for the tag in Scrubbler.Dependencies)
-              pushd "${SUBMODULE_PATH}" >/dev/null
-              git fetch --all --tags
-              git checkout "${DEPS_COMMIT}"
-              popd >/dev/null
+          done < repos.txt
 
-              # optional: copy deps/global.json to repo root
-              if [ "${COPY_GLOBAL_JSON}" = "true" ] && [ -f "${SUBMODULE_PATH}/global.json" ]; then
-                cp -f "${SUBMODULE_PATH}/global.json" "./global.json"
-                git add "./global.json"
-              fi
-
-              git add "${SUBMODULE_PATH}"
-
-              if git diff --cached --quiet; then
-                echo "No changes: already on ${TAG}"
-                exit 0
-              fi
-
-              # create/update branch
-              git checkout -B "${BRANCH}"
-
-              git commit -m "${TITLE}"
-
-              # push branch
-              git push -u origin "${BRANCH}" --force-with-lease
-
-              # open PR (if already exists, list it)
-              set +e
-              gh pr create \
-                --repo "${OWNER}/${REPO}" \
-                --head "${BRANCH}" \
-                --base "${DEFAULT_BRANCH}" \
-                --title "${TITLE}" \
-                --body "${BODY}"
-              status=$?
-              set -e
-
-              if [ $status -ne 0 ]; then
-                echo "PR create failed (likely already exists). Listing matching PRs:"
-                gh pr list --repo "${OWNER}/${REPO}" --head "${BRANCH}" --json number,title,url -q '.[] | "\(.number) \(.title) \(.url)"'
-              fi
-
-              echo "Updated: ${OWNER}/${REPO}"
-            ) || {
-              echo "FAILED: ${OWNER}/${REPO}"
-              failed=$((failed + 1))
-              rm -rf "${workdir}"
-              continue
-            }
-
-            rm -rf "${workdir}"
-            updated=$((updated + 1))
-
-          done <<< "${ALL_REPOS}"
-
-          echo "=============================="
-          echo "Summary"
-          echo "Processed: ${processed}"
-          echo "Updated:   ${updated}"
-          echo "Skipped:   ${skipped}"
-          echo "Failed:    ${failed}"
-          echo "=============================="
-
-          if [ "${failed}" -ne 0 ]; then
-            exit 1
-          fi
+          echo "======================================"
+          echo "Processed: $processed"
+          echo "Updated:   $updated"
+          echo "Skipped:   $skipped"
+          echo "Failed:    $failed"
+          echo "======================================"
