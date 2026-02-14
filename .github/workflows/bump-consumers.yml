@@ -69,7 +69,6 @@ jobs:
             echo "Default branch: $DEFAULT_BRANCH"
             echo "======================================"
 
-            # Check for .gitmodules at repo root
             if ! gh api "repos/$OWNER/$REPO/contents/.gitmodules" >/dev/null 2>&1; then
               echo "No .gitmodules → skipping"
               skipped=$((skipped+1))
@@ -79,8 +78,9 @@ jobs:
             processed=$((processed+1))
 
             WORKDIR=$(mktemp -d)
+
             if ! git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/$REPO.git" "$WORKDIR"; then
-              echo "Clone failed → skipping"
+              echo "Clone failed"
               failed=$((failed+1))
               rm -rf "$WORKDIR"
               continue
@@ -88,20 +88,11 @@ jobs:
 
             cd "$WORKDIR"
 
-            if ! git checkout "$DEFAULT_BRANCH"; then
-              echo "Failed to checkout $DEFAULT_BRANCH → skipping"
-              failed=$((failed+1))
-              cd /
-              rm -rf "$WORKDIR"
-              continue
-            fi
-
+            git checkout "$DEFAULT_BRANCH"
             git pull
 
-            # init/update submodules
             git submodule update --init --recursive
 
-            # detect the deps submodule path from git config (more reliable than parsing .gitmodules text)
             FOUND_SUBMODULE_PATH="$(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -E '(^|/)deps$' | head -n 1)"
 
             if [ -z "$FOUND_SUBMODULE_PATH" ]; then
@@ -113,7 +104,7 @@ jobs:
             fi
 
             if [ ! -d "$FOUND_SUBMODULE_PATH" ]; then
-              echo "Deps submodule path '$FOUND_SUBMODULE_PATH' not present after init → skipping"
+              echo "Detected submodule path '$FOUND_SUBMODULE_PATH' does not exist → skipping"
               failed=$((failed+1))
               cd /
               rm -rf "$WORKDIR"
@@ -122,13 +113,14 @@ jobs:
 
             echo "Using submodule path: $FOUND_SUBMODULE_PATH"
 
-            # update submodule to deps commit
             cd "$FOUND_SUBMODULE_PATH"
             git fetch --all --tags
             git checkout "$DEPS_COMMIT"
             cd ..
 
-            # optional: copy deps/global.json to repo root
+            # create branch BEFORE staging (important!)
+            git checkout -B "$BRANCH"
+
             if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
               cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
               git add "./global.json"
@@ -143,7 +135,6 @@ jobs:
               continue
             fi
 
-            git checkout -B "$BRANCH"
             git commit -m "$TITLE"
             git push -u origin "$BRANCH" --force-with-lease
 
@@ -158,7 +149,7 @@ jobs:
             set -e
 
             if [ $pr_status -ne 0 ]; then
-              echo "PR create failed (likely already exists). Listing matching PRs:"
+              echo "PR likely already exists. Listing:"
               gh pr list --repo "$OWNER/$REPO" --head "$BRANCH" --json number,title,url -q '.[] | "\(.number) \(.title) \(.url)"'
             fi
 
