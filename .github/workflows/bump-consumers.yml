@@ -1,0 +1,130 @@
+name: Bump consumers to Scrubbler.Dependencies tag
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "deps-*"
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Scrubbler.Dependencies
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tag + deps commit
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          COMMIT="$(git rev-list -n 1 "$TAG")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Tag: $TAG"
+          echo "Commit: $COMMIT"
+
+      - name: Bump submodule in consumer repos and open PRs
+        env:
+          GH_TOKEN: ${{ secrets.SCRUBBLER_PLUGINS_PAT }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
+          OWNER: "Scrubbler-Dev"
+          SUBMODULE_PATH: "deps"
+          REPOS: >
+            Scrubbler-2
+            Scrubbler-Plugins
+            Scrubbler.Plugin.Scrobbler.AppleMusicScrobbler
+            Scrubbler.Plugin.Scrobbler.FileParseScrobbler
+            Scrubbler.Plugin.Scrobbler.FriendScrobbler
+            Scrubbler.Plugin.Accounts.LastFm
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BRANCH="chore/bump-deps-${TAG}"
+          TITLE="chore: bump Scrubbler.Dependencies to ${TAG}"
+          BODY="$(cat <<EOF
+            This PR bumps the Scrubbler.Dependencies submodule to tag ${TAG} (${DEPS_COMMIT}).
+
+            Generated automatically from a Scrubbler.Dependencies tag push.
+            EOF
+            )"
+
+          for REPO in $REPOS; do
+            echo "=============================="
+            echo "Repo: ${OWNER}/${REPO}"
+            echo "=============================="
+
+            workdir="$(mktemp -d)"
+            git clone "https://x-access-token:${GH_TOKEN}@github.com/${OWNER}/${REPO}.git" "$workdir"
+            cd "$workdir"
+
+            # ensure default branch
+            git checkout main
+            git pull
+
+            # init/update submodules
+            git submodule update --init --recursive
+
+            if [ ! -d "${SUBMODULE_PATH}" ]; then
+              echo "Submodule path '${SUBMODULE_PATH}' not found in ${OWNER}/${REPO}. Skipping."
+              cd /
+              rm -rf "$workdir"
+              continue
+            fi
+
+            # move submodule to the desired commit (tag commit from deps repo)
+            pushd "${SUBMODULE_PATH}" >/dev/null
+            git fetch --all --tags
+            git checkout "${DEPS_COMMIT}"
+            popd >/dev/null
+
+            git add "${SUBMODULE_PATH}"
+
+            if git diff --cached --quiet; then
+              echo "No changes (already on ${TAG})."
+              cd /
+              rm -rf "$workdir"
+              continue
+            fi
+
+            # create/update branch
+            if git show-ref --quiet "refs/heads/${BRANCH}"; then
+              git checkout "${BRANCH}"
+            else
+              git checkout -b "${BRANCH}"
+            fi
+
+            git commit -m "${TITLE}"
+
+            # push branch
+            git push -u origin "${BRANCH}" --force-with-lease
+
+            # open or update PR
+            # If PR already exists, gh will fail; in that case we just print it.
+            set +e
+            gh pr create \
+              --repo "${OWNER}/${REPO}" \
+              --head "${BRANCH}" \
+              --base "main" \
+              --title "${TITLE}" \
+              --body "${BODY}"
+            status=$?
+            set -e
+
+            if [ $status -ne 0 ]; then
+              echo "PR create failed (likely already exists). Listing matching PRs:"
+              gh pr list --repo "${OWNER}/${REPO}" --head "${BRANCH}" --json number,title,url -q '.[] | "\(.number) \(.title) \(.url)"'
+            fi
+
+            cd /
+            rm -rf "$workdir"
+          done
