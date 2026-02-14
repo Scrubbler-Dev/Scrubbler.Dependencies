@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.SCRUBBLER_PLUGINS_PAT }}
           OWNER: Scrubbler-Dev
           # space-separated list of possible submodule paths
-          SUBMODULE_PATHS: "deps Scrubbler/Scrubbler/deps"
+          SUBMODULE_PATHS: "deps Scrubbler/deps"
           COPY_GLOBAL_JSON: "true"
           TAG: ${{ steps.meta.outputs.tag }}
           DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
