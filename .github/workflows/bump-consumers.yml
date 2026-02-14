@@ -34,7 +34,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SCRUBBLER_PLUGINS_PAT }}
           OWNER: Scrubbler-Dev
-          SUBMODULE_PATH: deps
+          # space-separated list of possible submodule paths
+          SUBMODULE_PATHS: "deps Scrubbler/Scrubbler/deps"
           COPY_GLOBAL_JSON: "true"
           TAG: ${{ steps.meta.outputs.tag }}
           DEPS_COMMIT: ${{ steps.meta.outputs.commit }}
@@ -77,38 +78,71 @@ jobs:
               continue
             fi
 
-            # Check if submodule path exists in .gitmodules
-            if ! gh api "repos/$OWNER/$REPO/contents/.gitmodules" \
-                  -q '.content' | base64 -d | grep -q "path = $SUBMODULE_PATH"; then
-              echo "No '$SUBMODULE_PATH' submodule → skipping"
+            # Fetch and decode .gitmodules content
+            gitmodules_content="$(gh api "repos/$OWNER/$REPO/contents/.gitmodules" -q '.content' | base64 -d || true)"
+
+            # Find the first matching submodule path
+            FOUND_SUBMODULE_PATH=""
+            for p in $SUBMODULE_PATHS; do
+              if echo "$gitmodules_content" | grep -qE "^[[:space:]]*path[[:space:]]*=[[:space:]]*$p[[:space:]]*$"; then
+                FOUND_SUBMODULE_PATH="$p"
+                break
+              fi
+            done
+
+            if [ -z "$FOUND_SUBMODULE_PATH" ]; then
+              echo "No matching deps submodule path found (expected one of: $SUBMODULE_PATHS) → skipping"
               skipped=$((skipped+1))
               continue
             fi
 
+            echo "Using submodule path: $FOUND_SUBMODULE_PATH"
+
             processed=$((processed+1))
 
             WORKDIR=$(mktemp -d)
-            git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/$REPO.git" "$WORKDIR"
+            if ! git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/$REPO.git" "$WORKDIR"; then
+              echo "Clone failed → skipping"
+              failed=$((failed+1))
+              rm -rf "$WORKDIR"
+              continue
+            fi
+
             cd "$WORKDIR"
 
-            git checkout "$DEFAULT_BRANCH"
+            if ! git checkout "$DEFAULT_BRANCH"; then
+              echo "Failed to checkout $DEFAULT_BRANCH → skipping"
+              failed=$((failed+1))
+              cd /
+              rm -rf "$WORKDIR"
+              continue
+            fi
+
             git pull
 
             git submodule update --init --recursive
 
+            if [ ! -d "$FOUND_SUBMODULE_PATH" ]; then
+              echo "Expected submodule directory '$FOUND_SUBMODULE_PATH' not present after init → skipping"
+              failed=$((failed+1))
+              cd /
+              rm -rf "$WORKDIR"
+              continue
+            fi
+
             # Update submodule to deps commit
-            cd "$SUBMODULE_PATH"
+            cd "$FOUND_SUBMODULE_PATH"
             git fetch --all --tags
             git checkout "$DEPS_COMMIT"
             cd ..
 
             # Optional: copy deps/global.json to repo root
-            if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$SUBMODULE_PATH/global.json" ]; then
-              cp -f "$SUBMODULE_PATH/global.json" "./global.json"
+            if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
+              cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
               git add "./global.json"
             fi
 
-            git add "$SUBMODULE_PATH"
+            git add "$FOUND_SUBMODULE_PATH"
 
             if git diff --cached --quiet; then
               echo "Already up to date."
@@ -128,7 +162,13 @@ jobs:
               --base "$DEFAULT_BRANCH" \
               --title "$TITLE" \
               --body "$BODY"
+            pr_status=$?
             set -e
+
+            if [ $pr_status -ne 0 ]; then
+              echo "PR create failed (likely already exists). Listing matching PRs:"
+              gh pr list --repo "$OWNER/$REPO" --head "$BRANCH" --json number,title,url -q '.[] | "\(.number) \(.title) \(.url)"'
+            fi
 
             updated=$((updated+1))
 
@@ -143,3 +183,7 @@ jobs:
           echo "Skipped:   $skipped"
           echo "Failed:    $failed"
           echo "======================================"
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
