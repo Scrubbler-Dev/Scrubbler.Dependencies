@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+    <PackageReference Include="DiscordRichPresence" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Uno.Microsoft.Xaml.Behaviors.Interactivity.WinUI" />
     <PackageReference Include="Uno.Microsoft.Xaml.Behaviors.WinUI.Managed" />
@@ -22,7 +23,10 @@
     <PackageReference Include="Scrubbler.MediaPlayerScrobblerBase" />
     <PackageReference Include="Shoegaze.LastFM" />
 
-    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
