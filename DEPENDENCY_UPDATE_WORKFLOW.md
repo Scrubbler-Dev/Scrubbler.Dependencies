@@ -52,9 +52,9 @@ The main app and shared base libraries import only the targets they need. Plugin
    dotnet build .\Catalog.slnx -c Release
    ```
 
-3. If the change affects a Scrubbler-owned package version, publish that package first.
+3. If the change affects a Scrubbler-owned package, publish that package from its own repository.
 
-   `Scrubbler.PluginBase` and `Scrubbler.MediaPlayerScrobblerBase` are published by their release workflows from `v*` GitHub releases. The new package version must be available to NuGet restore before `Directory.Packages.props` points at it.
+   `Scrubbler.PluginBase` and `Scrubbler.MediaPlayerScrobblerBase` consume this shared dependency baseline, but their NuGet versions are pinned by the repos that reference them, not by `Scrubbler.Dependencies`. Their release workflows should fan out version bumps to their own consumers after publishing.
 
 4. Commit and tag the dependency update.
 
@@ -152,6 +152,7 @@ Open a PR against the consumer default branch and let its normal test workflow v
 ## Things To Watch
 
 - A dependency tag is the release signal. Pushing `main` alone updates `Scrubbler.Dependencies` but does not fan out to consumers.
+- Scrubbler-owned packages are intentionally not pinned in this shared catalog. Keep `Scrubbler.PluginBase` and `Scrubbler.MediaPlayerScrobblerBase` versions in the repositories that reference them.
 - The fan-out workflow copies `global.json` to the consumer repository root. `Scrubbler.Build.targets` also copies `../deps/global.json` to the project parent directory during non-test builds, so SDK pins should remain aligned even in repos with a nested solution root.
 - The workflow skips repositories with no `.gitmodules` file or no submodule URL containing `Scrubbler.Dependencies`.
 - If a consumer is already at the tagged submodule commit and copied `global.json`, no PR is opened.

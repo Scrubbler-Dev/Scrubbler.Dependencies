@@ -17,10 +17,8 @@
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="WinUI.TableView" />
 
-    <PackageReference Include="Scrubbler.PluginBase" />
     <PackageReference Include="CsvHelper" />
     <PackageReference Include="FlaUI.UIA3" />
-    <PackageReference Include="Scrubbler.MediaPlayerScrobblerBase" />
     <PackageReference Include="Shoegaze.LastFM" />
 
     <PackageReference Include="coverlet.collector">
