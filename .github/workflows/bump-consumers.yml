@@ -131,10 +131,17 @@ jobs:
             git checkout "$DEPS_COMMIT"
             popd >/dev/null
 
-            # Optional: copy deps/global.json to repo root (we are in repo root here)
+            # Update the solution SDK pin before restore/build resolves Uno.Sdk.
             if [ "$COPY_GLOBAL_JSON" = "true" ] && [ -f "$FOUND_SUBMODULE_PATH/global.json" ]; then
-              cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
-              git add -- "./global.json"
+              SOLUTION_GLOBAL_JSON="$(dirname "$FOUND_SUBMODULE_PATH")/global.json"
+              cp -f "$FOUND_SUBMODULE_PATH/global.json" "$SOLUTION_GLOBAL_JSON"
+              git add -- "$SOLUTION_GLOBAL_JSON"
+
+              # Keep an existing repository-root pin aligned for nested solutions.
+              if [ "$SOLUTION_GLOBAL_JSON" != "./global.json" ] && [ -f "./global.json" ]; then
+                cp -f "$FOUND_SUBMODULE_PATH/global.json" "./global.json"
+                git add -- "./global.json"
+              fi
             fi
 
             # Stage submodule pointer update (we are in repo root here)

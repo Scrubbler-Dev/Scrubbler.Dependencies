@@ -78,7 +78,7 @@ The main app and shared base libraries import only the targets they need. Plugin
    - Finds the submodule whose URL contains `Scrubbler.Dependencies`.
    - Creates or resets `chore/bump-deps-<tag>` from the consumer default branch.
    - Checks out the dependency submodule to the tagged commit.
-   - Copies the dependency `global.json` to the consumer repository root when present.
+   - Copies the dependency `global.json` to the submodule's parent directory: `global.json` for `deps`, or `Scrubbler/global.json` for `Scrubbler/deps`. For nested solutions, also updates an existing repository-root `global.json`.
    - Commits the submodule pointer and copied `global.json`.
    - Pushes the branch and opens a PR named `chore: bump Scrubbler.Dependencies to <tag>`.
 
@@ -100,7 +100,7 @@ The main app and shared base libraries import only the targets they need. Plugin
    From the parent workspace:
 
    ```powershell
-   .\pull-all-repos.ps1 -IncludeSubmodules
+   .\pull-all-repos.ps1
    ```
 
 ## Bulk Merge And Cleanup Helpers
@@ -144,7 +144,8 @@ git checkout vX.Y.Z
 Pop-Location
 
 Copy-Item .\Scrubbler\deps\global.json .\global.json -Force
-git add .\Scrubbler\deps .\global.json
+Copy-Item .\Scrubbler\deps\global.json .\Scrubbler\global.json -Force
+git add .\Scrubbler\deps .\global.json .\Scrubbler\global.json
 ```
 
 Open a PR against the consumer default branch and let its normal test workflow validate the bump.
@@ -153,7 +154,7 @@ Open a PR against the consumer default branch and let its normal test workflow v
 
 - A dependency tag is the release signal. Pushing `main` alone updates `Scrubbler.Dependencies` but does not fan out to consumers.
 - Scrubbler-owned packages are intentionally not pinned in this shared catalog. Keep `Scrubbler.PluginBase` and `Scrubbler.MediaPlayerScrobblerBase` versions in the repositories that reference them.
-- The fan-out workflow copies `global.json` to the consumer repository root. `Scrubbler.Build.targets` also copies `../deps/global.json` to the project parent directory during non-test builds, so SDK pins should remain aligned even in repos with a nested solution root.
+- The fan-out workflow updates `global.json` beside the dependency submodule before restore/build, and keeps an existing repository-root copy aligned. `Scrubbler.Build.targets` also copies `../deps/global.json` to the project parent directory during non-test builds, but that target runs after SDK resolution and cannot select the SDK for the current build.
 - The workflow skips repositories with no `.gitmodules` file or no submodule URL containing `Scrubbler.Dependencies`.
 - If a consumer is already at the tagged submodule commit and copied `global.json`, no PR is opened.
 - Release workflows for the app, plugins, and shared NuGet packages checkout submodules recursively, so merged dependency bumps affect future release builds automatically.
