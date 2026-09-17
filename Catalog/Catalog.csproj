@@ -18,6 +18,9 @@
     <PackageReference Include="WinUI.TableView" />
 
     <PackageReference Include="CsvHelper" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" />
+    <PackageReference Include="System.Drawing.Common" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="FlaUI.UIA3" />
     <PackageReference Include="Shoegaze.LastFM" />
 
